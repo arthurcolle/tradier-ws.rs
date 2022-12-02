@@ -16,7 +16,7 @@ serde_json = "1.0.88"
 substring = "1.4.5"
 clap_lex = { version = "0.3.0" }
 libc = "0.2.137"
-tokio = { version = "1.22.0", features = ["rt-multi-thread", "macros"] }
+tokio = { version = "1.22.0", features = ["full", "rt-multi-thread", "macros"] }
 tungstenite = { version = "0.17.3", features = ["native-tls"] }
 url = "2.3.1"
 watchexec-cli = "1.20.6"
@@ -24,3 +24,6 @@ websocket = "0.26.5"
 hyper-tungstenite = "0.8.2"
 warp = "0.3.3"
 chrono = "0.4.23"
+quantlib = "0.1.0"
+polars = "0.25.1"
+postgres = "0.19.4"
