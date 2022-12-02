@@ -46,7 +46,7 @@ pub struct trade {
   last: String
 }
 
-fn s2f32 
+// fn s2f32 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct quote {
     #[serde(rename = "type")]
@@ -60,6 +60,8 @@ pub struct quote {
     askexch: String,
     askdate: String
 }
+
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct summary {
     #[serde(rename = "type")]
@@ -163,7 +165,6 @@ pub async fn subscribe(payload: String) -> ! {
     
     loop {
         let msg = socket.read_message().expect("Error reading message");
-        println!("{}", msg);
         generic_parse(msg.to_string()).await;
 
         // let e: TradierEvent = serde_json::from_str(&msg.to_string()).unwrap();
