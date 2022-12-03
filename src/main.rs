@@ -1,9 +1,11 @@
+#![allow(dead_code, unused_variables, warnings, unused)]
+
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use reqwest::header::{AUTHORIZATION, CONTENT_LENGTH, ACCEPT};
 use dotenv::dotenv;
-use serde::{Deserialize, Serialize};
 use serde_json::{Result, Value, json};
+use serde::Deserializer;
 use tokio::io::Stdout;
 use std::fmt;
 use std::io::{self, stdout};
@@ -13,7 +15,9 @@ use url::Url;
 use tungstenite::{connect, Message};
 use substring::Substring;
 use websocket::ClientBuilder;
-
+use ::chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use serde_with::{serde_as, DisplayFromStr};
 use std::io::stdin;
 use std::sync::mpsc::channel;
 use std::thread;
@@ -21,7 +25,7 @@ use std::fs;
 use std::io::Write;
 
 #[derive(Debug, Deserialize, Serialize)]
-pub struct timesale {
+pub struct TimeSale {
   symbol: String,
   #[serde(rename = "type")]
   type_: String,
@@ -33,8 +37,8 @@ pub struct timesale {
   date: String  
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-pub struct trade {
+#[derive(Debug, Deserialize)]
+pub struct Trade {
   #[serde(rename = "type")]
   type_: String,
   symbol: String,
@@ -46,9 +50,8 @@ pub struct trade {
   last: String
 }
 
-// fn s2f32 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct quote {
+pub struct Quote {
     #[serde(rename = "type")]
     type_: String,
     symbol: String,
@@ -63,51 +66,25 @@ pub struct quote {
 
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct summary {
+pub struct Summary {
     #[serde(rename = "type")]
     type_: String,
     symbol: String,
     open: String,
     high: String,
     low: String,
-    close: String,
-    prevClose: String  
+    close: Option<String>,
+    prevClose: Option<String>  
 }
 
   
 #[derive(Deserialize, Debug)]
 #[serde(untagged)]
 enum GenericResponseResult {    
-    trade(trade),
-    quote(quote),
-    timesale(timesale),
-    summary(summary)
-}
-
-//   example Quote payload
-// {
-//   "type":"quote", "symbol":"SPY",
-//   "bid":399.84, "bidsz":6, "bidexch":"P", "biddate":"1669165196000",
-//   "ask":399.87, "asksz":4, "askexch":"A", "askdate":"1669165200000"
-// }
-
-
-// {"type":"trade","symbol":"SPY","exch":"P","price":"407.38","size":"0","cvol":"75957622","date":"1669929000000","last":"407.38"}
-
-// {"type":"quote","symbol":"SPY","bid":407.12,"bidsz":24,"bidexch":"P","biddate":"1669932556000","ask":407.16,"asksz":20,"askexch":"Q","askdate":"1669932568000"}
-
-// {
-//   "type":"summary",
-//   "symbol":"SPY",
-//   "open":"396.63",
-//   "high":"400.07",
-//   "low":"395.1527",
-//   "prevClose":"394.59",
-//   "close":"399.9"
-// }
-
-pub enum MsgType {
-  Trade, Quote, Summary, TimeSale
+    Trade(Trade),
+    Quote(Quote),
+    TimeSale(TimeSale),
+    Summary(Summary)
 }
 
 #[derive(Deserialize, Serialize, Debug)]
@@ -126,29 +103,6 @@ pub fn create_payload(symbols: Vec<String>, sessionid: String, linebreak: bool) 
     return json!(payload).to_string();
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-
-// struct GenericJson {
-//
-// }
-
-struct Tradier {
-    type_: String,
-    symbol: String,
-    exch: String,
-    bid: String,
-    bidsz: String,
-    biddate: String,
-    askdate: String,
-    ask: String,
-    asksz: String,
-    last: String,
-    size: String,
-    date: String,
-    cvol: String,
-    price: String
-}
-
 pub async fn subscribe(payload: String) -> ! {
     let endpoint_url = "wss://ws.tradier.com/v1/markets/events";
     let (mut socket, response) =
@@ -165,6 +119,7 @@ pub async fn subscribe(payload: String) -> ! {
     
     loop {
         let msg = socket.read_message().expect("Error reading message");
+        println!("{}", &msg);
         generic_parse(msg.to_string()).await;
 
         // let e: TradierEvent = serde_json::from_str(&msg.to_string()).unwrap();
@@ -199,7 +154,6 @@ pub struct SessionDataL2 {
 #[warn(unused_variables)]
 pub async fn market_session(access_token: &str) -> String {
     let client = reqwest::Client::new();
-    // println!("{}", access_token);
     let auth_header: String = format!("Bearer {access_token}");
     let data = client
         .post("https://api.tradier.com/v1/markets/events/session")
@@ -284,17 +238,19 @@ pub async fn interactive() {
 
     subscribe(payload).await;
 
-    // let a: Data = serde_json::from_str(r#"{"type": "A", "value": [ 1, 2, 3, 4, 5 ]}"#).unwrap();
-    // let b: Data = serde_json::from_str(r#"{"type": "B", "value": [[1, 2, 3, 4, 5], [6, 7, 8 ]]}"#).unwrap();
-
-    // println!("{:?}", a);
-    // println!("{:?}", b);
 }
 
 async fn generic_parse(variant: String) -> GenericResponseResult {
   let event: GenericResponseResult = serde_json::from_str(&variant).unwrap();
-  println!("{:?}", event);
-  return event;
+  match event {
+    summary => {
+        println!("{:?}", &summary);
+        summary
+    },
+    quote => quote,
+    timesale => timesale,
+  // println!("{:?}", event);
+  }
 }
 
 
