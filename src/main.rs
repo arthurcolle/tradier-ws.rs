@@ -80,7 +80,7 @@ pub struct Summary {
   
 #[derive(Deserialize, Debug)]
 #[serde(untagged)]
-enum GenericResponseResult {    
+pub enum GenericResponseResult {    
     Trade(Trade),
     Quote(Quote),
     TimeSale(TimeSale),
@@ -88,11 +88,58 @@ enum GenericResponseResult {
 }
 
 #[derive(Deserialize, Serialize, Debug)]
-struct MarketPayload {
+pub struct MarketPayload {
     symbols: Vec<String>,
     sessionid: String,
     linebreak: bool
 }
+
+pub enum OrderType {
+  BuyToOpen,
+  SellToClose,
+  BuyToClose,
+  SellToOpen,
+}
+
+pub enum OrderAttribute {
+  LimitSell,
+  LimitBuy,
+  MarketSell,
+  MarketBuy,
+  Vwap,
+  Twap,
+  Custom
+}
+
+pub struct Venue {
+  code: String,
+  name: String,
+  description: String
+}
+
+pub struct Ticker {
+  symbol: String,
+  venue: Venue
+}
+
+pub struct Price {
+  quantity: f64,
+  currency: String
+}
+
+// pub struct Option {
+//   ticker: &Ticker,
+//   strike_price: &Price,
+//   expiration_date: &DateTime,
+//   current_price: Price,
+//   last_trade_trade: Price,
+//   delta: Greek,
+//   gamma: Greek,
+//   theta: Greek,
+//   rho: Greek,
+//   vega: Greek,
+//   iv: ImpliedVolatility
+// }
 
 pub fn create_payload(symbols: Vec<String>, sessionid: String, linebreak: bool) -> String {
     let payload = MarketPayload {
@@ -119,7 +166,7 @@ pub async fn subscribe(payload: String) -> ! {
     
     loop {
         let msg = socket.read_message().expect("Error reading message");
-        println!("{}", &msg);
+        // println!("{}", &msg);
         generic_parse(msg.to_string()).await;
 
         // let e: TradierEvent = serde_json::from_str(&msg.to_string()).unwrap();
@@ -201,16 +248,6 @@ pub async fn account_session(access_token: &str) -> String {
     return sid;
 }
 
-//# serde = { version = "1.0.99", features = ["derive"] }
-//# serde_json = "1.0.40"
-
-#[derive(Deserialize, Debug)]
-#[serde(tag = "type")]
-enum Data {
-    A { value: Vec<u32> },
-    B { value: Vec<Vec<u32>> },
-}
-
 pub async fn interactive() {
     dotenv().ok();
 
@@ -242,15 +279,8 @@ pub async fn interactive() {
 
 async fn generic_parse(variant: String) -> GenericResponseResult {
   let event: GenericResponseResult = serde_json::from_str(&variant).unwrap();
-  match event {
-    summary => {
-        println!("{:?}", &summary);
-        summary
-    },
-    quote => quote,
-    timesale => timesale,
-  // println!("{:?}", event);
-  }
+  println!("{:#?}", event);
+  return event;
 }
 
 
