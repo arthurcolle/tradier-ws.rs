@@ -1,14 +1,6 @@
-// let timesale = r#"
-//     {"type":"timesale",
-//     "symbol":"TSLA",
-//     "exch":"D",
-//     "bid":"167.87",
-//     "ask":"167.9",
-//     "last":"167.8962",
-//     "size":"250",
-//     "date":"1669144757274"}"#;
+mod primitives;
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Copy, Clone)]
 pub struct TimeSale {
   type_: String,
   symbol: String,
@@ -49,13 +41,6 @@ enum GenericResponseResult {
     Summary(Summary)
 }
 
-//   example Quote payload
-// {
-//   "type":"quote", "symbol":"SPY",
-//   "bid":399.84, "bidsz":6, "bidexch":"P", "biddate":"1669165196000",
-//   "ask":399.87, "asksz":4, "askexch":"A", "askdate":"1669165200000"
-// }
-
 pub struct Quote {
   type_: String,
   symbol: String,
@@ -84,22 +69,6 @@ pub struct Quote {
   date: i64,
   cvol: i64
 }
-
-
-
-// {"type":"trade","symbol":"SPY","exch":"P","price":"407.38","size":"0","cvol":"75957622","date":"1669929000000","last":"407.38"}
-
-// {"type":"quote","symbol":"SPY","bid":407.12,"bidsz":24,"bidexch":"P","biddate":"1669932556000","ask":407.16,"asksz":20,"askexch":"Q","askdate":"1669932568000"}
-
-// {
-//   "type":"summary",
-//   "symbol":"SPY",
-//   "open":"396.63",
-//   "high":"400.07",
-//   "low":"395.1527",
-//   "prevClose":"394.59",
-//   "close":"399.9"
-+// }
 
 pub struct Summary {
   type_: String,
@@ -139,7 +108,7 @@ pub struct TimeSale {
   date: String
 }
 
-async fn xyz() -> ! {
+pub async fn xyz() -> ! {
   let x: String = r#"
     {"type":"timesale","symbol":"SPY","exch":"P","bid":"407.12","ask":"407.15","last":"407.15","size":"600","date":"1669932568450"}
   "#;

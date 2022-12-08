@@ -2,6 +2,7 @@
 
 use std::collections::BTreeMap;
 use std::collections::HashMap;
+use polars::export::num::Float;
 use reqwest::header::{AUTHORIZATION, CONTENT_LENGTH, ACCEPT};
 use dotenv::dotenv;
 use serde_json::{Result, Value, json};
@@ -24,7 +25,7 @@ use std::thread;
 use std::fs;
 use std::io::Write;
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Deserialize, Debug, )]
 pub struct TimeSale {
   symbol: String,
   #[serde(rename = "type")]
@@ -37,7 +38,7 @@ pub struct TimeSale {
   date: String  
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct Trade {
   #[serde(rename = "type")]
   type_: String,
@@ -50,7 +51,7 @@ pub struct Trade {
   last: String
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct Quote {
     #[serde(rename = "type")]
     type_: String,
@@ -65,7 +66,7 @@ pub struct Quote {
 }
 
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct Summary {
     #[serde(rename = "type")]
     type_: String,
@@ -78,6 +79,7 @@ pub struct Summary {
 }
 
   
+
 #[derive(Deserialize, Debug)]
 #[serde(untagged)]
 pub enum GenericResponseResult {    
@@ -87,7 +89,7 @@ pub enum GenericResponseResult {
     Summary(Summary)
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive( Debug, Deserialize, Serialize)]
 pub struct MarketPayload {
     symbols: Vec<String>,
     sessionid: String,
@@ -141,6 +143,8 @@ pub struct Price {
 //   iv: ImpliedVolatility
 // }
 
+use crate::GenericResponseResult::*;
+
 pub fn create_payload(symbols: Vec<String>, sessionid: String, linebreak: bool) -> String {
     let payload = MarketPayload {
         symbols: symbols.clone(),
@@ -148,6 +152,10 @@ pub fn create_payload(symbols: Vec<String>, sessionid: String, linebreak: bool) 
         linebreak: linebreak.clone()
     };
     return json!(payload).to_string();
+}
+pub async fn process(grr: GenericResponseResult) -> bool {
+    // println!("{:#?}", &grr);
+    return true;
 }
 
 pub async fn subscribe(payload: String) -> ! {
@@ -167,8 +175,28 @@ pub async fn subscribe(payload: String) -> ! {
     loop {
         let msg = socket.read_message().expect("Error reading message");
         // println!("{}", &msg);
-        generic_parse(msg.to_string()).await;
-
+        let event = generic_parse(msg.to_string()).await;
+        let e = match event {
+            GenericResponseResult::Summary(summary) => {
+                process(GenericResponseResult::Summary(summary)).await
+            },
+            GenericResponseResult::Quote(quote) => {
+                println!("{} [Q] Nmid: ${:.2}", quote.symbol, (quote.bid+quote.ask)/2.0);
+                let bid = quote.bid as f64;
+                let offer = quote.ask as f64;
+                let bidsz = quote.bidsz as f64;
+                let offersz = quote.asksz as f64;
+                println!("{} [Q] Wmid: ${:.2}", quote.symbol, (quote.bid*bidsz+offer*offersz)/(bidsz+offersz));
+                process(GenericResponseResult::Quote(quote)).await
+            },
+            GenericResponseResult::Trade(trade) => {
+                process(GenericResponseResult::Trade(trade)).await
+            },
+            GenericResponseResult::TimeSale(ts) => {
+                // println!("Arthur was here! {}", ts.exch);
+                process(GenericResponseResult::TimeSale(ts)).await
+            }
+        };
         // let e: TradierEvent = serde_json::from_str(&msg.to_string()).unwrap();
         // println!("Parsed event: {:?}", e);
     }
@@ -180,7 +208,7 @@ impl fmt::Display for SessionDataL1 {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct SessionDataL1 {
     #[serde(flatten)]
     stream: HashMap<String, SessionDataL2>
@@ -192,7 +220,7 @@ impl fmt::Display for SessionDataL2 {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Deserialize, Debug, Serialize, Clone)]
 pub struct SessionDataL2 {
     url: String,
     sessionid: String
@@ -279,10 +307,8 @@ pub async fn interactive() {
 
 async fn generic_parse(variant: String) -> GenericResponseResult {
   let event: GenericResponseResult = serde_json::from_str(&variant).unwrap();
-  println!("{:#?}", event);
   return event;
 }
-
 
 pub async fn sandbox() {
     println!("Yo!")
