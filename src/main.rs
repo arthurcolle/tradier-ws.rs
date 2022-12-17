@@ -75,7 +75,7 @@ pub struct Summary {
     high: String,
     low: String,
     close: Option<String>,
-    prevClose: Option<String>  
+    prevClose: Option<String>
 }
 
   
@@ -178,22 +178,24 @@ pub async fn subscribe(payload: String) -> ! {
         let event = generic_parse(msg.to_string()).await;
         let e = match event {
             GenericResponseResult::Summary(summary) => {
+                println!(" [SUMMARY] {:#?}", summary);
                 process(GenericResponseResult::Summary(summary)).await
             },
             GenericResponseResult::Quote(quote) => {
-                println!("{} [Q] Nmid: ${:.2}", quote.symbol, (quote.bid+quote.ask)/2.0);
+                println!("{} [QUOTE] Nmid: ${:.2}", quote.symbol, (quote.bid+quote.ask)/2.0);
                 let bid = quote.bid as f64;
                 let offer = quote.ask as f64;
                 let bidsz = quote.bidsz as f64;
                 let offersz = quote.asksz as f64;
-                println!("{} [Q] Wmid: ${:.2}", quote.symbol, (quote.bid*bidsz+offer*offersz)/(bidsz+offersz));
+                println!("{} [QUOTE] Wmid ${:.2}", quote.symbol, (quote.bid*bidsz+offer*offersz)/(bidsz+offersz));
                 process(GenericResponseResult::Quote(quote)).await
             },
             GenericResponseResult::Trade(trade) => {
+                println!("   [TRADE] {:#?}", trade);
                 process(GenericResponseResult::Trade(trade)).await
             },
             GenericResponseResult::TimeSale(ts) => {
-                // println!("Arthur was here! {}", ts.exch);
+                println!("[TIMESALE] {:#?}", ts);
                 process(GenericResponseResult::TimeSale(ts)).await
             }
         };
@@ -314,9 +316,119 @@ pub async fn sandbox() {
     println!("Yo!")
 }
 
+fn option_price_lattice(underlier_price: f64, strike_price: f64, volatility: f64, interest_rate: f64, dividend_yield: f64, expiration: f64, steps: u32, option_type: OptionType) -> f64 {
+    // Calculate the time step
+    let dt = expiration / steps as f64;
+
+    // Calculate the up and down factors
+    let u = (1.0 + volatility * dt.sqrt()).powf(2.0);
+    let d = (1.0 - volatility * dt.sqrt()).powf(2.0);
+
+    // Calculate the probability of an up move and the probability of a down move
+    let p_up = (u - d) / (u - d * d);
+    let p_down = 1.0 - p_up;
+
+    // Create a vector to hold the option prices at each step
+    let mut prices = vec![0.0; (steps + 1) as usize];
+
+    // Set the initial option price at each node
+    for i in 0..=steps {
+        let price = underlier_price * d.powf(i as f64) * u.powf((steps - i) as f64);
+
+        if option_type == OptionType::Call {
+            prices[i as usize] = price.max(price - strike_price);
+        } else {
+            prices[i as usize] = price.max(strike_price - price);
+        }
+    }
+
+    // Iterate over the steps in reverse order
+    for i in (1..=steps).rev() {
+        // Calculate the discounted price at each node
+        let discount = (-interest_rate * dt).exp();
+
+        // Update the option prices using the lattice tree method
+        for j in 0..i {
+            let price = (p_up * prices[(j + 1) as usize] + p_down * prices[j as usize]) * discount;
+
+            if option_type == OptionType::Call {
+                prices[j as usize] = price.max(price - strike_price);
+            } else {
+                prices[j as usize] = price.max(strike_price - price);
+            }
+        }
+    }
+
+    // Return the option price at the root node
+    prices[0]
+}
+
+fn option_price_binomial(underlier_price: f64, strike_price: f64, days: u32, volatility: f64, dividend_yield: f64, interest_rate: f64, option_type: OptionType) -> f64 {
+    // Calculate the time step
+    let dt = days as f64 / 365.0;
+
+    // Calculate the up and down factors
+    let u = (1.0 + volatility * dt.sqrt()).powf(2.0);
+    let d = (1.0 - volatility * dt.sqrt()).powf(2.0);
+
+    // Calculate the probability of an up move and the probability of a down move
+    let p_up = (u - d) / (u - d * d);
+    let p_down = 1.0 - p_up;
+
+    // Create a vector to hold the option prices at each step
+    let mut prices = vec![0.0; (days + 1) as usize];
+
+    // Set the initial option price at each node
+    for i in 0..=days {
+        let price = underlier_price * d.powf(i as f64) * u.powf((days - i) as f64);
+
+        if option_type == OptionType::Call {
+            prices[i as usize] = price.max(price - strike_price);
+        } else {
+            prices[i as usize] = price.max(strike_price - price);
+        }
+    }
+
+    // Iterate over the days in reverse order
+    for i in (1..=days).rev() {
+        // Calculate the discounted price at each node
+        let discount = (-interest_rate * dt).exp();
+
+        // Update the option prices using the binomial model
+        for j in 0..i {
+            let price = (p_up * prices[(j + 1) as usize] + p_down * prices[j as usize]) * discount;
+
+            if option_type == OptionType::Call {
+                prices[j as usize] = price.max(price - strike_price);
+            } else {
+                prices[j as usize] = price.max(strike_price - price);
+            }
+        }
+    }
+
+    // Return the option price at the root node
+    prices[0]
+}
+
+
+
+// Enum to represent the option type
+#[derive(PartialEq)]
+enum OptionType {
+    Call,
+    Put
+}
+
 #[tokio::main]
 pub async fn main() {
     interactive().await;
+    // let call_price = option_price_lattice(389.0, 390.0, 0.2, 0.05, 0.01, 0.025, 1000, OptionType::Call);
+    // let put_price = option_price_lattice(389.0, 391.0, 0.2, 0.05, 0.01, 0.025, 1000, OptionType::Put);
+    // let call_price = option_price_black_scholes(389.0, 390.0, 5, 0.25, 0.05, 0.0355, OptionType::Call);
+    // let put_price = option_price_black_scholes(389.0, 390.0, 5, 0.25, 0.05, 0.0355, OptionType::Put);
+
+    // println!("Call price: {}, put price: {}", call_price, put_price);
+
     // sandbox().await;
     // xyz().await;
 }

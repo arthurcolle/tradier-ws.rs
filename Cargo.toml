@@ -28,3 +28,4 @@ quantlib = "0.1.0"
 polars = "0.25.1"
 postgres = "0.19.4"
 serde_with = "2.1.0"
+statrs = { version = "0.16.0", features = ["nightly"] }
