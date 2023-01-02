@@ -5,8 +5,6 @@ use std::collections::HashMap;
 use polars::export::num::Float;
 use reqwest::header::{AUTHORIZATION, CONTENT_LENGTH, ACCEPT};
 use dotenv::dotenv;
-use serde_json::{Result, Value, json};
-use serde::Deserializer;
 use tokio::io::Stdout;
 use std::fmt;
 use std::io::{self, stdout};
@@ -17,38 +15,68 @@ use tungstenite::{connect, Message};
 use substring::Substring;
 use websocket::ClientBuilder;
 use ::chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
+use serde::{Deserialize, Serialize, Deserializer, de};
 use serde_with::{serde_as, DisplayFromStr};
 use std::io::stdin;
 use std::sync::mpsc::channel;
 use std::thread;
 use std::fs;
 use std::io::Write;
+use std::result::Result;
+use ftp::FtpStream;
+use std::io::Cursor;
 
-#[derive(Deserialize, Debug, )]
+#[derive(Deserialize, Serialize, Debug)]
 pub struct TimeSale {
   symbol: String,
   #[serde(rename = "type")]
   type_: String,
   exch: String,
-  bid: String,
-  ask: String,
-  last: String,
-  size: String,
+  #[serde(deserialize_with = "de_s2f64")]
+  bid: f64,
+  #[serde(deserialize_with = "de_s2f64")]
+  ask: f64,
+  #[serde(deserialize_with = "de_s2f64")]
+  last: f64,
+  #[serde(deserialize_with = "de_s2f64")]
+  size: f64,
   date: String  
 }
 
-#[derive(Deserialize, Debug)]
+fn de_s2f64<'de, D: Deserializer<'de>>(deserializer: D) -> Result<f64, D::Error> {
+    Ok(match Value::deserialize(deserializer)? {
+        Value::String(s) => s.parse().map_err(de::Error::custom)?,
+        Value::Number(num) => num.as_f64().ok_or(de::Error::custom("Invalid number"))? as f64,
+        _ => return Err(de::Error::custom("wrong type"))
+    })
+}
+
+pub struct TimeSaleData {
+  pub symbol: String,
+  pub exch: String,
+  pub bid: f64,
+  pub ask: f64,
+  pub last: f64,
+  pub size: i32,
+  pub date: String
+}
+
+#[derive(Deserialize, Serialize, Debug)]
 pub struct Trade {
   #[serde(rename = "type")]
   type_: String,
   symbol: String,
   exch: String,
-  price: String,
-  size: String,
-  cvol: String,
+  #[serde(deserialize_with = "de_s2f64")]
+  price: f64,
+  #[serde(deserialize_with = "de_s2f64")]
+  size: f64,
+  #[serde(deserialize_with = "de_s2f64")]
+  cvol: f64,
   date: String,
-  last: String
+  #[serde(deserialize_with = "de_s2f64")]
+  last: f64
 }
 
 #[derive(Deserialize, Debug)]
@@ -66,16 +94,39 @@ pub struct Quote {
 }
 
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 pub struct Summary {
     #[serde(rename = "type")]
     type_: String,
     symbol: String,
-    open: String,
-    high: String,
-    low: String,
+    #[serde(deserialize_with = "de_s2f64")]
+    open: f64,
+    #[serde(deserialize_with = "de_s2f64")]
+    high: f64,
+    #[serde(deserialize_with = "de_s2f64")]
+    low: f64,
+    // #[serde(deserialize_with = "de_s2f64")]
     close: Option<String>,
+    // #[serde(deserialize_with = "de_s2f64")]
     prevClose: Option<String>
+}
+
+pub struct SummaryData {
+    pub symbol: String,
+    pub open: f64,
+    pub high: f64,
+    pub low: f64,
+    pub close: f64,
+    pub prevClose: f64
+}
+
+pub struct TradeData {
+    pub symbol: String,
+    pub price: f64,
+    pub size: i32,
+    pub cvol: i32,
+    pub date: String,
+    pub last: f64
 }
 
   
@@ -154,7 +205,36 @@ pub fn create_payload(symbols: Vec<String>, sessionid: String, linebreak: bool) 
     return json!(payload).to_string();
 }
 pub async fn process(grr: GenericResponseResult) -> bool {
-    // println!("{:#?}", &grr);
+    match grr {
+        Summary(summary) => {
+            println!(" [SUMMARY] {:#?}", summary);
+        },
+        Quote(quote) => {
+            println!("{} [QUOTE] Nmid: ${:.2}", quote.symbol, (quote.bid+quote.ask)/2.0);
+            let bid = quote.bid as f64;
+            let offer = quote.ask as f64;
+            let bidsz = quote.bidsz as f64;
+            let offersz = quote.asksz as f64;
+            println!("{} [QUOTE] Wmid ${:.2}", quote.symbol, (quote.bid*bidsz+offer*offersz)/(bidsz+offersz));
+        },
+        TimeSale(timesale) => {
+            println!("{} [TIMESALE] {}", timesale.symbol, timesale.last);
+        },
+        Trade(trade) => {
+            //    [TRADE] Trade {
+            //     type_: "trade",
+            //     symbol: "TSLA221223C00125000",
+            //     exch: "N",
+            //     price: "3.2",
+            //     size: "3",
+            //     cvol: "50689",
+            //     date: "1671735204536",
+            //     last: "3.2",
+            // }
+            
+            println!("{} [TRADE] {}", trade.symbol, trade.price);
+        }
+    }
     return true;
 }
 
@@ -304,7 +384,6 @@ pub async fn interactive() {
     let payload = create_payload(symbols, session_id, true);
 
     subscribe(payload).await;
-
 }
 
 async fn generic_parse(variant: String) -> GenericResponseResult {
@@ -358,10 +437,14 @@ fn option_price_lattice(underlier_price: f64, strike_price: f64, volatility: f64
             }
         }
     }
-
     // Return the option price at the root node
     prices[0]
 }
+
+// Price an option using the lattice method
+
+
+
 
 fn option_price_binomial(underlier_price: f64, strike_price: f64, days: u32, volatility: f64, dividend_yield: f64, interest_rate: f64, option_type: OptionType) -> f64 {
     // Calculate the time step
@@ -410,6 +493,27 @@ fn option_price_binomial(underlier_price: f64, strike_price: f64, days: u32, vol
     prices[0]
 }
 
+fn file_download() {
+    let url = "ftp://ftp.nasdaqtrader.com/symboldirectory/";
+    let files = [ "nasdaqlisted.txt", "otherlisted"];
+    let mut ftp_stream = FtpStream::connect("ftp://ftp.nasdaqtrader.com/symboldirectory/").unwrap();
+    let _ = ftp_stream.login("", "").unwrap();
+    println!("Current directory: {}", ftp_stream.pwd().unwrap());
+
+    // Retrieve (GET) a file from the FTP server in the current working directory.
+    let remote_file = ftp_stream.simple_retr(files[0]).unwrap();
+    println!("Read file with contents\n{}\n", std::str::from_utf8(&remote_file.into_inner()).unwrap());
+
+    // Store (PUT) a file from the client to the current working directory of the server.
+    let mut reader = Cursor::new("Hello from the Rust \"ftp\" crate!".as_bytes());
+    let _ = ftp_stream.put("greeting.txt", &mut reader);
+    println!("Successfully wrote greeting.txt");
+
+    // Terminate the connection to the server.
+    let _ = ftp_stream.quit();
+    // return reader;
+}
+
 
 
 // Enum to represent the option type
@@ -421,7 +525,10 @@ enum OptionType {
 
 #[tokio::main]
 pub async fn main() {
+    // see if any command line arguments were provided (tickers or option contract identifiers can be passed in at the command line)
     interactive().await;
+    // file_download();
+
     // let call_price = option_price_lattice(389.0, 390.0, 0.2, 0.05, 0.01, 0.025, 1000, OptionType::Call);
     // let put_price = option_price_lattice(389.0, 391.0, 0.2, 0.05, 0.01, 0.025, 1000, OptionType::Put);
     // let call_price = option_price_black_scholes(389.0, 390.0, 5, 0.25, 0.05, 0.0355, OptionType::Call);
