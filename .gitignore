@@ -2,3 +2,7 @@
 .env
 .DS_Store
 pricing
+pricebook.sh
+pricebook.json
+recorderbook.py
+
