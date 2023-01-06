@@ -26,6 +26,8 @@ use std::io::Write;
 use std::result::Result;
 use ftp::FtpStream;
 use std::io::Cursor;
+use text_colorizer::*;
+use std::fs::File;
 
 #[derive(Deserialize, Serialize, Debug)]
 pub struct TimeSale {
@@ -41,13 +43,34 @@ pub struct TimeSale {
   last: f64,
   #[serde(deserialize_with = "de_s2f64")]
   size: f64,
-  date: String  
+  #[serde(deserialize_with = "de_sux2sdt")]
+  date: String 
 }
 
 fn de_s2f64<'de, D: Deserializer<'de>>(deserializer: D) -> Result<f64, D::Error> {
     Ok(match Value::deserialize(deserializer)? {
         Value::String(s) => s.parse().map_err(de::Error::custom)?,
         Value::Number(num) => num.as_f64().ok_or(de::Error::custom("Invalid number"))? as f64,
+        _ => return Err(de::Error::custom("wrong type"))
+    })
+}
+
+fn de_sux2sdt<'de, D: Deserializer<'de>>(deserializer: D) -> Result<String, D::Error> {
+    Ok(match Value::deserialize(deserializer)? {
+        Value::String(s) => {
+                // Convert the timestamp string into an i64
+            let timestamp = s.parse::<i64>().unwrap();
+            
+            // Create a NaiveDateTime from the timestamp
+            let naive = chrono::NaiveDateTime::from_timestamp(timestamp, 0);
+            
+            // Create a normal DateTime from the NaiveDateTime
+            let datetime: DateTime<Utc> = DateTime::from_utc(naive, Utc);
+            
+            // Format the datetime how you want
+            let newdate = datetime.format("%Y-%m-%d %H:%M:%S");
+            s
+        },
         _ => return Err(de::Error::custom("wrong type"))
     })
 }
@@ -74,6 +97,7 @@ pub struct Trade {
   size: f64,
   #[serde(deserialize_with = "de_s2f64")]
   cvol: f64,
+  #[serde(deserialize_with = "de_sux2sdt")]
   date: String,
   #[serde(deserialize_with = "de_s2f64")]
   last: f64
@@ -86,10 +110,12 @@ pub struct Quote {
     symbol: String,
     bid: f64,
     bidsz: i32,
+    #[serde(deserialize_with = "de_sux2sdt")]
     biddate: String,
     ask: f64,
     asksz: i32,
     askexch: String,
+    #[serde(deserialize_with = "de_sux2sdt")]
     askdate: String
 }
 
@@ -110,26 +136,6 @@ pub struct Summary {
     // #[serde(deserialize_with = "de_s2f64")]
     prevClose: Option<String>
 }
-
-pub struct SummaryData {
-    pub symbol: String,
-    pub open: f64,
-    pub high: f64,
-    pub low: f64,
-    pub close: f64,
-    pub prevClose: f64
-}
-
-pub struct TradeData {
-    pub symbol: String,
-    pub price: f64,
-    pub size: i32,
-    pub cvol: i32,
-    pub date: String,
-    pub last: f64
-}
-
-  
 
 #[derive(Deserialize, Debug)]
 #[serde(untagged)]
@@ -207,7 +213,7 @@ pub fn create_payload(symbols: Vec<String>, sessionid: String, linebreak: bool) 
 pub async fn process(grr: GenericResponseResult) -> bool {
     match grr {
         Summary(summary) => {
-            println!(" [SUMMARY] {:#?}", summary);
+            // println!("[SUMMARY] {:#?}", summary);
         },
         Quote(quote) => {
             println!("{} [QUOTE] Nmid: ${:.2}", quote.symbol, (quote.bid+quote.ask)/2.0);
@@ -221,17 +227,6 @@ pub async fn process(grr: GenericResponseResult) -> bool {
             println!("{} [TIMESALE] {}", timesale.symbol, timesale.last);
         },
         Trade(trade) => {
-            //    [TRADE] Trade {
-            //     type_: "trade",
-            //     symbol: "TSLA221223C00125000",
-            //     exch: "N",
-            //     price: "3.2",
-            //     size: "3",
-            //     cvol: "50689",
-            //     date: "1671735204536",
-            //     last: "3.2",
-            // }
-            
             println!("{} [TRADE] {}", trade.symbol, trade.price);
         }
     }
@@ -248,7 +243,7 @@ pub async fn subscribe(payload: String) -> ! {
     println!("Response contains the following headers:");
 
     match socket.write_message(Message::Text(payload)) {
-        Ok(T) => { println!("all good") }
+        Ok(T) => { println!("All good! 🥳") }
         Err(_) => todo!(),
     }
     
@@ -258,7 +253,7 @@ pub async fn subscribe(payload: String) -> ! {
         let event = generic_parse(msg.to_string()).await;
         let e = match event {
             GenericResponseResult::Summary(summary) => {
-                println!(" [SUMMARY] {:#?}", summary);
+                println!("{} [SUMMARY] {:?}", summary.symbol, summary);
                 process(GenericResponseResult::Summary(summary)).await
             },
             GenericResponseResult::Quote(quote) => {
@@ -267,15 +262,15 @@ pub async fn subscribe(payload: String) -> ! {
                 let offer = quote.ask as f64;
                 let bidsz = quote.bidsz as f64;
                 let offersz = quote.asksz as f64;
-                println!("{} [QUOTE] Wmid ${:.2}", quote.symbol, (quote.bid*bidsz+offer*offersz)/(bidsz+offersz));
+                // println!("{} [QUOTE] Wmid ${:.2}", quote.symbol, (quote.bid*bidsz+offer*offersz)/(bidsz+offersz));
                 process(GenericResponseResult::Quote(quote)).await
             },
             GenericResponseResult::Trade(trade) => {
-                println!("   [TRADE] {:#?}", trade);
+                // println!("[TRADE] {:#?}", trade);
                 process(GenericResponseResult::Trade(trade)).await
             },
             GenericResponseResult::TimeSale(ts) => {
-                println!("[TIMESALE] {:#?}", ts);
+                // println!("[TIMESALE] {:#?}", ts);
                 process(GenericResponseResult::TimeSale(ts)).await
             }
         };
@@ -495,10 +490,19 @@ fn option_price_binomial(underlier_price: f64, strike_price: f64, days: u32, vol
 
 fn file_download() {
     let url = "ftp://ftp.nasdaqtrader.com/symboldirectory/";
-    let files = [ "nasdaqlisted.txt", "otherlisted"];
-    let mut ftp_stream = FtpStream::connect("ftp://ftp.nasdaqtrader.com/symboldirectory/").unwrap();
+    let files = [ "nasdaqlisted.txt", "otherlisted.txt", "options.txt" ];
+    let mut ftp_stream = FtpStream::connect("ftp.nasdaqtrader.com").unwrap();
     let _ = ftp_stream.login("", "").unwrap();
     println!("Current directory: {}", ftp_stream.pwd().unwrap());
+    // Change directory to Symboldirectory
+    let _ = ftp_stream.cwd("symboldirectory").unwrap();
+    // get options.txt, nasdaqlisted.txt, and otherlisted.txt
+    for file in files.iter() {
+        let remote_file = ftp_stream.simple_retr(file).unwrap();
+        let mut file = File::create(file).unwrap();
+        file.write_all(&remote_file.into_inner()).unwrap();
+    }
+
 
     // Retrieve (GET) a file from the FTP server in the current working directory.
     let remote_file = ftp_stream.simple_retr(files[0]).unwrap();

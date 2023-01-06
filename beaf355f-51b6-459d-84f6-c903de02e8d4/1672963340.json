@@ -1,0 +1,1 @@
+{"asks":[{"side":"ask","price":{"amount":"17.120000","currency_code":"USD"},"quantity":200}],"bids":[{"side":"bid","price":{"amount":"8.970000","currency_code":"USD"},"quantity":100},{"side":"bid","price":{"amount":"8.920000","currency_code":"USD"},"quantity":100}],"instrument_id":"beaf355f-51b6-459d-84f6-c903de02e8d4","updated_at":"2023-01-05T19:02:20.442842119-05:00"}

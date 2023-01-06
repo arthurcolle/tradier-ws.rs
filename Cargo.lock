@@ -25,6 +25,7 @@ dependencies = [
  "serde_with",
  "statrs",
  "substring",
+ "text-colorizer",
  "tokio",
  "tungstenite",
  "url 2.3.1",
@@ -561,6 +562,17 @@ checksum = "3538270d33cc669650c4b093848450d380def10c331d38c768e34cac80576e6e"
 dependencies = [
  "termcolor",
  "unicode-width",
+]
+
+[[package]]
+name = "colored"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b3616f750b84d8f0de8a58bda93e08e2a81ad3f523089b05f1dffecab48c6cbd"
+dependencies = [
+ "atty",
+ "lazy_static 1.4.0",
+ "winapi 0.3.9",
 ]
 
 [[package]]
@@ -4130,6 +4142,15 @@ dependencies = [
  "nom 5.1.2",
  "phf 0.8.0",
  "phf_codegen",
+]
+
+[[package]]
+name = "text-colorizer"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b30f9b94bd367aacc3f62cd28668b10c7ae1784c7d27e223a1c21646221a9166"
+dependencies = [
+ "colored",
 ]
 
 [[package]]

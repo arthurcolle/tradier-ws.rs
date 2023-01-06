@@ -1,0 +1,1 @@
+{"asks":[{"side":"ask","price":{"amount":"42.860000","currency_code":"USD"},"quantity":200}],"bids":[{"side":"bid","price":{"amount":"10.720000","currency_code":"USD"},"quantity":200}],"instrument_id":"6c205931-21b6-4f55-acc9-64e7e683bd47","updated_at":"2023-01-05T19:14:32.541956785-05:00"}
